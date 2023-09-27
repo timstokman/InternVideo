@@ -60,11 +60,11 @@ def pytorch2onnx(model,
         verify (bool): Determines whether to verify the onnx model.
             Default: False.
     """
-    model.cpu().eval()
+    model.cuda().eval()
     if fp16:
         model = model.half()
 
-    one_img = torch.randn(input_shape)
+    one_img = torch.randn(input_shape).cuda()
     if fp16:
         one_img = one_img.half()
 
