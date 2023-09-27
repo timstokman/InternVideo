@@ -3,7 +3,6 @@ import argparse
 import mmcv
 import numpy as np
 import torch
-from mmcv.runner import load_checkpoint
 
 from mmaction.models import build_model
 
@@ -44,6 +43,8 @@ def _convert_batchnorm(module):
 def pytorch2onnx(model,
                  input_shape,
                  opset_version=11,
+                 fp16=False,
+                 cuda=False,
                  show=False,
                  output_file='tmp.onnx',
                  verify=False):
@@ -60,10 +61,14 @@ def pytorch2onnx(model,
             Default: False.
     """
     model.cpu().eval()
+    if fp16:
+        model = model.half()
 
     one_img = torch.randn(input_shape)
+    if fp16:
+        one_img = one_img.half()
 
-    register_extra_symbolics(opset_version)
+    # register_extra_symbolics(opset_version)
     torch.onnx.export(
         model,
         one_img,
@@ -106,6 +111,7 @@ def parse_args():
         description='Convert MMAction2 models to ONNX')
     parser.add_argument('config', help='test config file path')
     parser.add_argument('checkpoint', help='checkpoint file')
+    parser.add_argument('--fp16', action='store_true', help='export as FP16')
     parser.add_argument('--show', action='store_true', help='show onnx graph')
     parser.add_argument('--output-file', type=str, default='tmp.onnx')
     parser.add_argument('--opset-version', type=int, default=11)
@@ -121,10 +127,16 @@ def parse_args():
         '--shape',
         type=int,
         nargs='+',
-        default=[1, 3, 8, 224, 224],
+        default=[1, 3, 3, 32, 224, 224],
         help='input video size')
     args = parser.parse_args()
     return args
+
+
+def load_checkpoint(model, load_path, map_location):
+    state_dict = torch.load(load_path, map_location=map_location)
+    model_state_dict = state_dict['model']
+    model.load_state_dict(model_state_dict, strict=False)
 
 
 if __name__ == '__main__':
@@ -151,12 +163,13 @@ if __name__ == '__main__':
         raise NotImplementedError(
             'Please implement the forward method for exporting.')
 
-    checkpoint = load_checkpoint(model, args.checkpoint, map_location='cpu')
+    load_checkpoint(model, args.checkpoint, map_location='cpu')
 
     # conver model to onnx file
     pytorch2onnx(
         model,
         args.shape,
+        fp16=args.fp16,
         opset_version=args.opset_version,
         show=args.show,
         output_file=args.output_file,
